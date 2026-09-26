@@ -50,11 +50,17 @@ async function loadFile(file){
     workspace.classList.remove('hidden');
     resultsSection.classList.add('hidden');
 
+    // 기본 설정(예: 4×4)을 사용자가 한 번도 건드리지 않았더라도
+    // 업로드 순간 분할선 데이터부터 먼저 준비합니다.
+    seedGuidesFromSettings();
+
+    // 작업 영역을 먼저 노출한 뒤 실제 레이아웃이 잡히는 시점에
+    // 캔버스와 분할선을 함께 그립니다. 레이아웃 계산이 늦는 환경은
+    // 짧게 재시도해서, 설정을 변경해야만 선이 나타나는 문제를 막습니다.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         drawPreview();
-        resetGuides();
-        // 이미지가 보이는 즉시 사용자가 분할선을 확인할 수 있도록 상단으로 맞춥니다.
+        ensureGuidesVisible();
         previewStage.scrollIntoView({behavior:'auto', block:'nearest'});
       });
     });
@@ -68,6 +74,33 @@ fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
 ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {e.preventDefault(); dropzone.classList.add('drag');}));
 ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => {e.preventDefault(); dropzone.classList.remove('drag');}));
 dropzone.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
+
+
+function seedGuidesFromSettings(){
+  const cols = Number(colsSelect.value) || 1;
+  const rows = Number(rowsSelect.value) || 1;
+  verticalGuides = Array.from({length:Math.max(0,cols-1)},(_,i)=>(i+1)/cols);
+  horizontalGuides = Array.from({length:Math.max(0,rows-1)},(_,i)=>(i+1)/rows);
+  selectedGuide = verticalGuides.length ? {axis:'v',index:0} : (horizontalGuides.length ? {axis:'h',index:0}:null);
+}
+
+function ensureGuidesVisible(attempt=0){
+  if(!sourceImage) return;
+  const canvasRect = previewCanvas.getBoundingClientRect();
+  const stageRect = previewStage.getBoundingClientRect();
+
+  if(canvasRect.width > 0 && canvasRect.height > 0 && stageRect.width > 0){
+    alignGuideLayer();
+    renderGuides();
+    buildGuideSelect();
+    return;
+  }
+
+  // 모바일/느린 렌더링 환경에서 레이아웃이 아직 0px이면 다음 프레임에 재시도
+  if(attempt < 12){
+    requestAnimationFrame(() => ensureGuidesVisible(attempt+1));
+  }
+}
 
 function drawPreview(){
   if(!sourceImage) return;
@@ -86,8 +119,7 @@ function drawPreview(){
 
   // 캔버스 크기가 DOM에 반영된 다음 분할선 레이어를 정확히 맞춥니다.
   requestAnimationFrame(() => {
-    alignGuideLayer();
-    renderGuides();
+    ensureGuidesVisible();
   });
 }
 
@@ -107,14 +139,8 @@ function alignGuideLayer(){
 }
 
 function resetGuides(){
-  const cols = Number(colsSelect.value);
-  const rows = Number(rowsSelect.value);
-  verticalGuides = Array.from({length:Math.max(0,cols-1)},(_,i)=>(i+1)/cols);
-  horizontalGuides = Array.from({length:Math.max(0,rows-1)},(_,i)=>(i+1)/rows);
-  selectedGuide = verticalGuides.length ? {axis:'v',index:0} : (horizontalGuides.length ? {axis:'h',index:0}:null);
-  alignGuideLayer();
-  renderGuides();
-  buildGuideSelect();
+  seedGuidesFromSettings();
+  ensureGuidesVisible();
   clearResults();
 }
 
@@ -202,7 +228,7 @@ function refreshPreviewLayout(){
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
     drawPreview();
-    requestAnimationFrame(alignGuideLayer);
+    requestAnimationFrame(() => ensureGuidesVisible());
   });
 }
 window.addEventListener('resize', refreshPreviewLayout);
@@ -252,9 +278,10 @@ function renderResults(cols,rows){
     const card=document.createElement('article'); card.className='result-card';
     const img=document.createElement('img'); img.src=item.url; img.alt=item.name;
     const actions=document.createElement('div'); actions.className='result-actions';
-    const label=document.createElement('strong'); label.textContent=`${item.name} · ${item.width}×${item.height}`;
-    const btn=document.createElement('button'); btn.textContent='저장'; btn.onclick=()=>downloadBlob(item.blob,item.name);
-    actions.append(label,btn); card.append(img,actions); resultGrid.appendChild(card);
+    const label=document.createElement('strong'); label.textContent=item.name;
+    const dimensions=document.createElement('div'); dimensions.className='result-dimensions'; dimensions.textContent=`${item.width}×${item.height}px`;
+    const btn=document.createElement('button'); btn.textContent='저장'; btn.onclick=()=>openSaveSheet(item);
+    actions.append(label,dimensions,btn); card.append(img,actions); resultGrid.appendChild(card);
   });
   resultMeta.textContent=`${cols}×${rows} · 총 ${splitResults.length}장`;
   resultsSection.classList.remove('hidden');
@@ -265,10 +292,83 @@ function downloadBlob(blob,name){
   const a=document.createElement('a'); const url=URL.createObjectURL(blob); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function closeSaveSheet(){
+  const old=document.querySelector('.save-sheet-backdrop');
+  if(old) old.remove();
+}
+
+function openSaveSheet(item){
+  closeSaveSheet();
+  const backdrop=document.createElement('div'); backdrop.className='save-sheet-backdrop';
+  const sheet=document.createElement('div'); sheet.className='save-sheet'; sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-modal','true');
+  const title=document.createElement('h3'); title.textContent='저장 위치 선택';
+  const fileName=document.createElement('p'); fileName.className='save-file-name'; fileName.textContent=item.name;
+  const actions=document.createElement('div'); actions.className='save-sheet-actions';
+
+  const fileBtn=document.createElement('button'); fileBtn.className='accent'; fileBtn.textContent='파일로 저장';
+  fileBtn.onclick=async()=>{ closeSaveSheet(); await saveFileWithPicker(item.blob,item.name); };
+
+  const albumBtn=document.createElement('button'); albumBtn.className='secondary'; albumBtn.textContent='앨범에 저장';
+  albumBtn.onclick=async()=>{ closeSaveSheet(); await saveToAlbum(item.blob,item.name); };
+
+  const cancelBtn=document.createElement('button'); cancelBtn.className='cancel'; cancelBtn.textContent='취소'; cancelBtn.onclick=closeSaveSheet;
+  const note=document.createElement('p'); note.className='save-sheet-note';
+  note.textContent='앨범 저장은 모바일의 공유 메뉴를 열어 “이미지 저장/사진에 저장”을 선택하는 방식입니다.';
+
+  actions.append(fileBtn,albumBtn,cancelBtn); sheet.append(title,fileName,actions,note); backdrop.appendChild(sheet); document.body.appendChild(backdrop);
+  backdrop.addEventListener('click',e=>{ if(e.target===backdrop) closeSaveSheet(); });
+}
+
+async function saveFileWithPicker(blob,name){
+  if('showSaveFilePicker' in window){
+    try{
+      const ext=name.split('.').pop().toLowerCase();
+      const mime=blob.type || mimeType();
+      const handle=await window.showSaveFilePicker({suggestedName:name,types:[{description:'이미지 파일',accept:{[mime]:[`.${ext}`]}}]});
+      const writable=await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      console.warn('파일 저장 선택기를 사용할 수 없어 기본 다운로드로 전환합니다.',err);
+    }
+  }
+  // iOS/Safari 등 File System Access API 미지원 환경은 브라우저 다운로드/파일 앱 저장 흐름 사용
+  downloadBlob(blob,name);
+}
+
+async function saveToAlbum(blob,name){
+  const file=new File([blob],name,{type:blob.type || mimeType()});
+  if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    try{
+      await navigator.share({files:[file],title:name});
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      console.warn('공유 메뉴를 열 수 없습니다.',err);
+    }
+  }
+  // 웹페이지는 브라우저 보안상 사진 앨범에 직접 쓰기 권한이 없습니다.
+  // 공유 API가 없는 환경에서는 새 탭으로 이미지를 열어 사용자가 직접 저장할 수 있게 합니다.
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank','noopener,noreferrer');
+  if(!win) downloadBlob(blob,name);
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  alert('이 브라우저는 앨범 직접 저장을 지원하지 않습니다. 열린 이미지에서 기기의 “이미지 저장/사진에 저장” 기능을 사용해주세요.');
+}
+
 splitBtn.addEventListener('click',makeSplitResults);
 downloadZipBtn.addEventListener('click',async()=>{
   if(!splitResults.length) return;
   const zip=new JSZip(); splitResults.forEach(x=>zip.file(x.name,x.blob));
   const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
-  downloadBlob(blob,`${sourceName}_split.zip`);
+  const zipName=`${sourceName}_split.zip`;
+  if('showSaveFilePicker' in window){
+    try{
+      const handle=await window.showSaveFilePicker({suggestedName:zipName,types:[{description:'ZIP 파일',accept:{'application/zip':['.zip']}}]});
+      const writable=await handle.createWritable(); await writable.write(blob); await writable.close(); return;
+    }catch(err){ if(err && err.name==='AbortError') return; }
+  }
+  downloadBlob(blob,zipName);
 });

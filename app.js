@@ -205,6 +205,7 @@ async function makeSplitResults(){
 
 function renderResults(cols,rows){
   resultGrid.innerHTML='';
+  resultGrid.style.setProperty('--result-cols', cols);
   splitResults.forEach((item,i)=>{
     const card=document.createElement('article'); card.className='result-card';
     const img=document.createElement('img'); img.src=item.url; img.alt=item.name;

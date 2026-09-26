@@ -4,17 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#111318" />
-  <title>AI 이미지 업스케일 · 분할</title>
+  <title>이미지 분할 도구</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <div>
-        <h1>AI 이미지 업스케일 · 분할</h1>
-        <p>Real-ESRGAN 4× 고화질 업스케일 + 가로·세로 1~4 분할 + 드래그 분할선 편집</p>
+        <h1>이미지 분할 도구</h1>
+        <p>가로·세로 1~4 자유 분할 · 분할선 직접 조정 · PNG/ZIP 저장</p>
       </div>
-      <span id="backendBadge" class="badge">엔진 확인 중</span>
+      <span class="badge">브라우저에서 바로 처리</span>
     </header>
 
     <section class="panel upload-panel">
@@ -29,61 +29,18 @@
     <section class="workspace hidden" id="workspace">
       <div class="preview-card panel">
         <div class="section-head">
-          <h2>미리보기</h2>
-          <div class="tabs">
-            <button class="tab active" data-preview="original">원본</button>
-            <button class="tab" data-preview="upscaled">업스케일</button>
-          </div>
+          <h2>분할선 미리보기</h2>
+          <button id="resetGuidesBtn" type="button">균등 분할로 초기화</button>
         </div>
-        <div class="preview-stage">
+        <div class="preview-stage" id="previewStage">
           <canvas id="previewCanvas"></canvas>
-          <div id="guideLayer" class="guide-layer hidden" aria-label="분할선 편집 영역"></div>
+          <div id="guideLayer" class="guide-layer"></div>
         </div>
+        <p class="helper">분할선을 마우스나 터치로 직접 드래그하세요.</p>
       </div>
 
       <div class="controls panel">
-        <h2>1. AI 고화질 업스케일</h2>
-        <div class="control-grid">
-          <label>
-            <span>AI 모델</span>
-            <select id="modelSelect">
-              <option value="anime">일러스트 · 애니메이션</option>
-              <option value="general">사진 · 범용</option>
-            </select>
-          </label>
-          <label>
-            <span>처리 속도</span>
-            <select id="tileSelect">
-              <option value="auto" selected>자동 최적화 · 권장</option>
-              <option value="512">고속 · 512</option>
-              <option value="384">빠름 · 384</option>
-              <option value="256">균형 · 256</option>
-              <option value="128">안정 · 128</option>
-              <option value="96">저사양 · 96</option>
-              <option value="64">최대 안정 · 64</option>
-            </select>
-          </label>
-          <label>
-            <span>겹침</span>
-            <select id="overlapSelect">
-              <option value="8">8px · 빠름</option>
-              <option value="12" selected>12px · 권장</option>
-              <option value="16">16px · 경계 안정</option>
-            </select>
-          </label>
-        </div>
-        <p id="engineHint" class="meta">엔진 성능 확인 중...</p>
-        <p id="activePreset" class="meta">현재 처리: 자동</p>
-        <button id="upscaleBtn" class="primary">전체 이미지 4× AI 업스케일</button>
-
-        <div class="progress-wrap hidden" id="progressWrap">
-          <div class="progress-row"><span id="progressLabel">준비 중...</span><strong id="progressPercent">0%</strong></div>
-          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-        </div>
-
-        <hr />
-
-        <h2>2. 이미지 분할</h2>
+        <h2>분할 설정</h2>
         <div class="control-grid">
           <label>
             <span>가로 분할 수</span>
@@ -104,25 +61,20 @@
             </select>
           </label>
           <label>
-            <span>분할 대상</span>
-            <select id="sourceSelect">
-              <option value="upscaled">업스케일 결과</option>
-              <option value="original">원본</option>
-            </select>
-          </label>
-          <label>
             <span>가장자리 여백 제거</span>
             <input id="trimInput" type="number" value="0" min="0" max="100" inputmode="numeric" />
           </label>
+          <label>
+            <span>저장 형식</span>
+            <select id="formatSelect">
+              <option value="png" selected>PNG</option>
+              <option value="jpeg">JPG</option>
+              <option value="webp">WEBP</option>
+            </select>
+          </label>
         </div>
+
         <div class="split-editor">
-          <div class="split-editor-head">
-            <div>
-              <strong>분할선 편집</strong>
-              <p>선을 직접 드래그하거나 선택한 선을 1px씩 이동할 수 있습니다.</p>
-            </div>
-            <button id="resetGuidesBtn" type="button">균등 분할로 초기화</button>
-          </div>
           <div class="guide-controls">
             <label>
               <span>선택한 분할선</span>
@@ -135,13 +87,10 @@
               <button id="nudgeRightBtn" type="button" title="오른쪽으로 1px">→</button>
             </div>
           </div>
-          <p id="guidePositionMeta" class="meta guide-position-meta"></p>
+          <p id="guidePositionMeta" class="meta"></p>
         </div>
-        <div class="button-row three">
-          <button id="showGridBtn">분할선 편집</button>
-          <button id="splitBtn">분할 미리보기</button>
-          <button id="splitUpscaleBtn" class="primary">분할 후 각각 4× 업스케일 · 추천</button>
-        </div>
+
+        <button id="splitBtn" class="primary">분할 미리보기 만들기</button>
       </div>
     </section>
 
@@ -157,18 +106,14 @@
     </section>
 
     <section class="panel notes">
-      <h2>사용 안내</h2>
-      <p>첫 AI 업스케일 실행 시 약 9~18MB 모델을 내려받습니다. 이후에는 브라우저 캐시를 사용할 수 있습니다.</p>
-      <p>PC Chrome/Edge에서 WebGPU가 감지되면 기본 512px 타일을 사용하며, 메모리 오류가 나면 384 → 256 → 128px 순으로 자동 재시도합니다.</p>
-      <p>같은 크기의 타일을 반복 처리해 WebGPU 그래프 캡처를 사용할 수 있도록 최적화했습니다. 모델이 그래프 캡처와 호환되지 않으면 자동으로 일반 WebGPU 실행으로 전환합니다.</p>
-      <p>가로·세로 분할 수를 각각 1~4까지 자유롭게 선택할 수 있습니다. 예: 4×3=12장, 3×2=6장, 1×4=4장.</p>
-      <p>AI 생성 그리드가 정확히 균등하지 않다면 “분할선 편집”에서 세로·가로 선을 직접 드래그하거나 화살표로 1px씩 미세 조정한 뒤 “분할 미리보기”를 확인하세요.</p>
-      <p>4×4 그리드 작업은 “분할 후 각각 4× 업스케일”을 권장합니다. 편집한 분할선을 그대로 사용해 장면별로 처리합니다.</p>
-      <p>처리는 서버 업로드 없이 브라우저 안에서 진행됩니다.</p>
+      <h2>사용 방법</h2>
+      <p>1. 이미지를 올린 뒤 가로·세로 분할 수를 각각 1~4까지 선택합니다.</p>
+      <p>2. 분할선이 실제 장면 경계와 다르면 선을 직접 드래그하거나 화살표 버튼으로 1px씩 조정합니다.</p>
+      <p>3. “분할 미리보기 만들기”로 결과를 확인한 뒤 개별 저장 또는 전체 ZIP 저장을 사용합니다.</p>
+      <p>모든 처리는 서버 업로드 없이 브라우저 안에서 진행됩니다.</p>
     </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="app.js"></script>
 </body>

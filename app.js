@@ -42,12 +42,23 @@ async function loadFile(file){
   img.onload = () => {
     sourceImage = img;
     sourceName = baseName(file.name);
-    drawPreview();
-    resetGuides();
+
+    // 중요: 숨겨진 상태에서는 previewStage의 실제 크기를 구할 수 없습니다.
+    // 먼저 작업 영역을 표시한 뒤 브라우저 레이아웃이 끝난 다음 캔버스와 분할선을 그립니다.
     fileMeta.textContent = `${file.name} · ${img.naturalWidth}×${img.naturalHeight}px`;
     fileMeta.classList.remove('hidden');
     workspace.classList.remove('hidden');
     resultsSection.classList.add('hidden');
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        drawPreview();
+        resetGuides();
+        // 이미지가 보이는 즉시 사용자가 분할선을 확인할 수 있도록 상단으로 맞춥니다.
+        previewStage.scrollIntoView({behavior:'auto', block:'nearest'});
+      });
+    });
+
     URL.revokeObjectURL(url);
   };
   img.src = url;
@@ -60,27 +71,39 @@ dropzone.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
 
 function drawPreview(){
   if(!sourceImage) return;
-  const maxW = Math.min(900, previewStage.clientWidth || 900);
+
+  // 현재 화면에 실제로 표시된 previewStage 너비를 기준으로 계산합니다.
+  const stageWidth = previewStage.getBoundingClientRect().width;
+  const maxW = Math.min(900, Math.max(1, stageWidth));
   const maxH = Math.min(window.innerHeight * .68, 760);
   const s = Math.min(maxW/sourceImage.naturalWidth, maxH/sourceImage.naturalHeight, 1);
+
   previewCanvas.width = Math.max(1, Math.round(sourceImage.naturalWidth*s));
   previewCanvas.height = Math.max(1, Math.round(sourceImage.naturalHeight*s));
   const ctx = previewCanvas.getContext('2d');
   ctx.clearRect(0,0,previewCanvas.width,previewCanvas.height);
   ctx.drawImage(sourceImage,0,0,previewCanvas.width,previewCanvas.height);
-  alignGuideLayer();
-  renderGuides();
+
+  // 캔버스 크기가 DOM에 반영된 다음 분할선 레이어를 정확히 맞춥니다.
+  requestAnimationFrame(() => {
+    alignGuideLayer();
+    renderGuides();
+  });
 }
 
 function alignGuideLayer(){
+  if(!sourceImage || workspace.classList.contains('hidden')) return;
   const stageRect = previewStage.getBoundingClientRect();
   const canvasRect = previewCanvas.getBoundingClientRect();
+  if(canvasRect.width <= 0 || canvasRect.height <= 0) return;
+
   guideLayer.style.left = `${canvasRect.left-stageRect.left}px`;
   guideLayer.style.top = `${canvasRect.top-stageRect.top}px`;
   guideLayer.style.width = `${canvasRect.width}px`;
   guideLayer.style.height = `${canvasRect.height}px`;
   guideLayer.style.right = 'auto';
   guideLayer.style.bottom = 'auto';
+  guideLayer.classList.add('ready');
 }
 
 function resetGuides(){
@@ -89,6 +112,7 @@ function resetGuides(){
   verticalGuides = Array.from({length:Math.max(0,cols-1)},(_,i)=>(i+1)/cols);
   horizontalGuides = Array.from({length:Math.max(0,rows-1)},(_,i)=>(i+1)/rows);
   selectedGuide = verticalGuides.length ? {axis:'v',index:0} : (horizontalGuides.length ? {axis:'h',index:0}:null);
+  alignGuideLayer();
   renderGuides();
   buildGuideSelect();
   clearResults();
@@ -171,7 +195,25 @@ function nudge(dx,dy){
 nudgeLeftBtn.onclick=()=>nudge(-1,0); nudgeRightBtn.onclick=()=>nudge(1,0); nudgeUpBtn.onclick=()=>nudge(0,-1); nudgeDownBtn.onclick=()=>nudge(0,1);
 
 colsSelect.addEventListener('change',resetGuides); rowsSelect.addEventListener('change',resetGuides); resetGuidesBtn.addEventListener('click',resetGuides);
-window.addEventListener('resize',()=>{if(sourceImage){drawPreview();}});
+
+let resizeFrame = 0;
+function refreshPreviewLayout(){
+  if(!sourceImage) return;
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    drawPreview();
+    requestAnimationFrame(alignGuideLayer);
+  });
+}
+window.addEventListener('resize', refreshPreviewLayout);
+
+// 패널 너비가 바뀌는 경우에도 분할선을 즉시 캔버스 위에 다시 맞춥니다.
+if('ResizeObserver' in window){
+  const previewObserver = new ResizeObserver(() => {
+    if(sourceImage) refreshPreviewLayout();
+  });
+  previewObserver.observe(previewStage);
+}
 
 function boundaries(guides){return [0,...guides,1];}
 function canvasToBlob(canvas,type,quality=.96){return new Promise(resolve=>canvas.toBlob(resolve,type,quality));}

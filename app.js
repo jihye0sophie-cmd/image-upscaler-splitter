@@ -18,6 +18,7 @@ const resultsSection = $('resultsSection');
 const resultMeta = $('resultMeta');
 const resultGrid = $('resultGrid');
 const downloadZipBtn = $('downloadZipBtn');
+const downloadAllBtn = $('downloadAllBtn');
 const nudgeLeftBtn = $('nudgeLeftBtn');
 const nudgeRightBtn = $('nudgeRightBtn');
 const nudgeUpBtn = $('nudgeUpBtn');
@@ -358,7 +359,86 @@ async function saveToAlbum(blob,name){
   alert('이 브라우저는 앨범 직접 저장을 지원하지 않습니다. 열린 이미지에서 기기의 “이미지 저장/사진에 저장” 기능을 사용해주세요.');
 }
 
+
+function filesFromSplitResults(){
+  return splitResults.map(item => new File([item.blob], item.name, {type:item.blob.type || mimeType()}));
+}
+
+function openBatchSaveSheet(){
+  if(!splitResults.length) return;
+  closeSaveSheet();
+  const backdrop=document.createElement('div'); backdrop.className='save-sheet-backdrop';
+  const sheet=document.createElement('div'); sheet.className='save-sheet'; sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-modal','true');
+  const title=document.createElement('h3'); title.textContent='전체 이미지 일괄 저장';
+  const fileName=document.createElement('p'); fileName.className='save-file-name'; fileName.textContent=`총 ${splitResults.length}장 · ZIP 없이 개별 이미지로 저장`;
+  const actions=document.createElement('div'); actions.className='save-sheet-actions';
+
+  const folderBtn=document.createElement('button'); folderBtn.className='accent'; folderBtn.textContent='폴더에 전체 저장';
+  folderBtn.onclick=async()=>{ closeSaveSheet(); await saveAllToFolder(); };
+
+  const albumBtn=document.createElement('button'); albumBtn.className='secondary'; albumBtn.textContent='앨범에 전체 저장';
+  albumBtn.onclick=async()=>{ closeSaveSheet(); await saveAllToAlbum(); };
+
+  const downloadBtn=document.createElement('button'); downloadBtn.className='secondary'; downloadBtn.textContent='브라우저로 모두 다운로드';
+  downloadBtn.onclick=()=>{ closeSaveSheet(); downloadAllIndividually(); };
+
+  const cancelBtn=document.createElement('button'); cancelBtn.className='cancel'; cancelBtn.textContent='취소'; cancelBtn.onclick=closeSaveSheet;
+  const note=document.createElement('p'); note.className='save-sheet-note';
+  note.textContent='PC는 폴더 저장을 권장합니다. 모바일은 앨범 저장을 누른 뒤 공유 메뉴에서 “이미지 저장/사진에 저장”을 선택하세요.';
+
+  actions.append(folderBtn,albumBtn,downloadBtn,cancelBtn);
+  sheet.append(title,fileName,actions,note); backdrop.appendChild(sheet); document.body.appendChild(backdrop);
+  backdrop.addEventListener('click',e=>{ if(e.target===backdrop) closeSaveSheet(); });
+}
+
+async function saveAllToFolder(){
+  if(!splitResults.length) return;
+  if('showDirectoryPicker' in window){
+    try{
+      const dirHandle=await window.showDirectoryPicker({mode:'readwrite'});
+      for(const item of splitResults){
+        const fileHandle=await dirHandle.getFileHandle(item.name,{create:true});
+        const writable=await fileHandle.createWritable();
+        await writable.write(item.blob);
+        await writable.close();
+      }
+      alert(`총 ${splitResults.length}장의 이미지를 선택한 폴더에 저장했습니다.`);
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      console.warn('폴더 저장을 사용할 수 없습니다.',err);
+    }
+  }
+  alert('이 브라우저는 폴더 일괄 저장을 지원하지 않습니다. “브라우저로 모두 다운로드”를 사용해주세요.');
+}
+
+async function saveAllToAlbum(){
+  if(!splitResults.length) return;
+  const files=filesFromSplitResults();
+  if(navigator.share && (!navigator.canShare || navigator.canShare({files}))){
+    try{
+      await navigator.share({files,title:`${sourceName} 분할 이미지 ${files.length}장`});
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      console.warn('여러 이미지 공유를 사용할 수 없습니다.',err);
+    }
+  }
+  alert('이 브라우저는 여러 이미지를 한 번에 앨범으로 보내는 기능을 지원하지 않습니다. 개별 저장 또는 “브라우저로 모두 다운로드”를 사용해주세요.');
+}
+
+function downloadAllIndividually(){
+  if(!splitResults.length) return;
+  splitResults.forEach((item,index)=>{
+    setTimeout(()=>downloadBlob(item.blob,item.name),index*220);
+  });
+  setTimeout(()=>{
+    alert('브라우저에서 여러 파일 다운로드 허용 메시지가 뜨면 “허용”을 선택해주세요.');
+  },300);
+}
+
 splitBtn.addEventListener('click',makeSplitResults);
+downloadAllBtn.addEventListener('click',openBatchSaveSheet);
 downloadZipBtn.addEventListener('click',async()=>{
   if(!splitResults.length) return;
   const zip=new JSZip(); splitResults.forEach(x=>zip.file(x.name,x.blob));

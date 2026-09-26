@@ -13,3 +13,13 @@
 .save-sheet-note{margin:10px 2px 0;color:#8e97a5;font-size:12px;line-height:1.45}
 .result-card .result-dimensions{font-size:12px;color:#8e97a5;text-align:center;margin-top:-3px}
 @media(min-width:821px){.result-card .result-actions{padding:12px}.result-card button{min-height:40px}}
+
+/* v5.7 batch save */
+.batch-actions{display:flex;gap:8px;align-items:center}
+.batch-actions .primary{width:auto;min-width:170px}
+.batch-actions button{white-space:nowrap}
+@media(max-width:680px){
+  #resultsSection .section-head{align-items:stretch;flex-direction:column}
+  .batch-actions{display:grid;grid-template-columns:1fr;gap:8px;width:100%}
+  .batch-actions .primary,.batch-actions button{width:100%}
+}

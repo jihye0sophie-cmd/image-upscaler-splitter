@@ -1,38 +1,42 @@
-# AI 이미지 업스케일 · 분할
+# AI 이미지 업스케일 · 분할 v2
 
-GitHub Pages에서 바로 실행할 수 있는 브라우저 기반 이미지 도구입니다.
+GitHub Pages에서 실행하는 브라우저 기반 Real-ESRGAN 4x 업스케일 + 이미지 분할 도구입니다.
 
-## 주요 기능
-- Real-ESRGAN 4× AI 고화질 업스케일
-- 일러스트/애니메이션 모델, 사진/범용 모델 선택
-- WebGPU 우선, 미지원 환경은 WASM(CPU) 자동 전환
-- 큰 이미지 타일 처리 + 겹침(Overlap)
-- 2×2 / 4×4 이미지 분할
-- scene_01.png ~ scene_16.png 자동 파일명
-- 개별 PNG 저장
-- 전체 ZIP 저장
-- 가장자리 여백 제거(px)
-- 이미지 처리는 브라우저 로컬에서 수행
+## v2 속도 개선
+- PC Chrome/Edge에서 WebGPU를 명시적으로 사용
+- 자동 최적화 기본값: WebGPU 512px / WASM 128px
+- 메모리 오류 시 512 → 384 → 320 → 256 → 192 → 128 → 96 → 64px 자동 하향
+- 기존 `tile - overlap*2` 간격 대신 `core tile` 단위로 진행하여 겹침 영역 중복 추론을 크게 감소
+- 모든 타일 입력 크기를 고정해 WebGPU Graph Capture 시도
+- Graph Capture 비호환 모델은 자동으로 일반 WebGPU 모드로 재시도
+- WebGPU 버퍼 캐시 사용
+- 4x4 그리드는 “분할 후 각각 4x 업스케일” 지원: 초대형 전체 출력 캔버스를 만들지 않아 메모리 안정성 향상
 
-## GitHub Pages 배포
-1. 새 GitHub 저장소를 만듭니다.
-2. 이 폴더의 `index.html`, `style.css`, `app.js`를 저장소 루트에 업로드합니다.
-3. GitHub 저장소의 **Settings → Pages**로 이동합니다.
-4. **Build and deployment → Source**에서 `Deploy from a branch`를 선택합니다.
-5. Branch를 `main`, 폴더를 `/(root)`로 지정하고 Save 합니다.
-6. 잠시 후 표시되는 Pages 주소로 접속합니다.
+## GitHub Pages 업데이트
+기존 저장소 최상단의 다음 파일을 새 버전으로 교체하세요.
+- `index.html`
+- `app.js`
+- `README.md`
 
-## 권장 설정
-- iPhone/iPad: 타일 64 또는 96
-- PC Chrome/Edge: 타일 96~160
-- 경계선이 보이면 Overlap을 16px로 올려보세요.
+`style.css`와 `LICENSE-NOTICES.txt`는 기존 파일을 그대로 사용해도 됩니다.
 
-## 모델
-- 일러스트/애니메이션: RealESRGAN_x4plus_anime_6B (ONNX)
-- 사진/범용: realesr-general-x4v3 (ONNX)
+## 권장 사용
+- PC Chrome/Edge: `자동 최적화`, overlap 12px
+- 충분한 GPU 메모리: 512px
+- 메모리 오류: 자동 모드가 타일을 낮춰 재시도
+- 4x4 그리드: `분할 후 각각 4× 업스케일 · 추천`
 
-모델은 실행 시 Hugging Face에서 다운로드됩니다. 모델 라이선스/저작권은 각 원본 모델 저장소를 따릅니다.
 
-## 주의
-- iOS Safari는 현재 ONNX Runtime Web에서 WebGPU가 지원되지 않아 WASM(CPU)으로 실행됩니다. 따라서 4× 업스케일은 PC보다 느릴 수 있습니다.
-- 아주 큰 원본 이미지는 4× 출력 시 메모리 사용량이 크게 증가합니다. 오류가 나면 타일 크기를 낮추거나 PC에서 처리하세요.
+## v3 추가 기능
+- 균등 분할선을 기준으로 시작한 뒤 세로/가로 분할선을 마우스 또는 터치로 직접 드래그할 수 있습니다.
+- 선택한 분할선을 화살표 버튼으로 1px씩 미세 조정할 수 있습니다.
+- 편집한 분할선을 기준으로 분할 미리보기, 개별 PNG, 전체 ZIP 저장, 분할 후 AI 업스케일을 수행합니다.
+- “균등 분할로 초기화” 버튼으로 언제든 기본 위치로 되돌릴 수 있습니다.
+
+
+## v4 추가 기능
+- 가로 분할 수와 세로 분할 수를 각각 1~4까지 독립적으로 선택
+- 1×1부터 4×4까지 모든 조합 지원
+- 예: 4×3=12장, 3×2=6장, 1×4=4장
+- 선택한 분할 수에 맞춰 분할선 자동 생성 및 수동 위치 조정 유지
+- 분할 미리보기, 장면별 AI 4× 업스케일, ZIP 저장 모두 비정사각 그리드 지원
